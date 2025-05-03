@@ -1,9 +1,20 @@
+/**
+ * @file blinky.c
+ * @author Mahmoud Mostafa Tayee (mahmoud.tayee.1994@gmail.com)
+ * @brief This is a simple program that blinks a LED.
+ * @details Just used for developing a BL and OTA that jumps to this app.
+ * @version 0.1
+ * @date 2025-05-03
+ * 
+ * @copyright Copyright (c) 2025
+ * 
+ */
 //*****************************************************************************
 //
 //! \file       blinky.c
 //! \brief      Blink an LED at a user-defined rate
 //
-//! This program blinks an LED connected to any of the GPIO pins of the
+//! 
 //! EK-TM4C123GXL.
 //
 //! This program is a modified version of the original Texas Instruments

@@ -1,10 +1,14 @@
 /**
- * @file
- * @brief    Implementation for simple app for implementations of BL and OTA for EK-TM4C123GXL
- * @details  This file contains implementations of board low-level functions
- *           for EK-TM4C123GXL..
- *
- * @author   Mahmoud Mostafa Tayee
+ * @file blinky.h
+ * @author      Mahmoud Mostafa Tayee (mahmoud.tayee.1994@gmail.com)
+ * @brief       Implementation for simple app for implementations of BL and OTA for EK-TM4C123GXL
+ * @details     This file contains implementations of board low-level functions
+ *              for simple app to be used with of BL and OTA for EK-TM4C123GXL.
+ * @version 0.1
+ * @date 2025-05-03
+ * 
+ * @copyright Copyright (c) 2025
+ * 
  */
 #ifndef __BLINKY_H__
 #define __BLINKY_H__

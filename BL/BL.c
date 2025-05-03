@@ -26,6 +26,7 @@
 #include "inc/hw_gpio.h"
 #include "drivers/buttons.h"
 #include "BL.h"
+#include "../retval.h"
 
 #ifdef DEBUG
 /**
@@ -62,6 +63,7 @@ void SysTickIntHandler(void);
 void InitSysTick(void);
 void app_init(void);
 static void jump_to_app(void);
+retval_t OTA_update(void);
 
 /* ***********************************************************************************/
 /* Functions definitions */
@@ -249,7 +251,9 @@ static void jump_to_app(void)
     app_reset_handler();
 }
 
-
+retval_t OTA_update(void) { 
+    return RETVAL_SUCCESS; 
+}
 /**
  * @brief Main app
  * 
@@ -262,8 +266,12 @@ int main(void)
     tenu_BLstate enu_BLstate = BL_STARTED;
 
     // BL!
+    LOG("------------------------------------------------------------\n");
+    LOG("------------------------------------------------------------\n");
     LOG("BL world!\n");
     LOG("Starting BL version %d.%d\n", gau32_bl_version[0], gau32_bl_version[1]);
+    LOG("------------------------------------------------------------\n");
+    LOG("------------------------------------------------------------\n");
 
     // Turn on the BL(RED) LED.
     GPIOPinWrite(LEDS_GPIO_BASE, BOARD_LED_PINS, BL_LED);
@@ -293,19 +301,24 @@ int main(void)
         }
     }
 
-    switch(enu_BLstate)
-    {
-        case OTA_UPDATE_REQUESTED:
-            GPIOPinWrite(LEDS_GPIO_BASE, BOARD_LED_PINS, BL_LED | BLUE_LED);
-            SysCtlDelay(2000000); /* Delay for a bit. */
-            break;
-        case NORMAL_APP_START:
-            // Here we jump to the main app.
-            jump_to_app();
-            break;
-        default:
-            break;
-    }
+    if(OTA_UPDATE_REQUESTED == enu_BLstate){
+        LOG("Starting OTA update!\r\n");
+        GPIOPinWrite(LEDS_GPIO_BASE, BOARD_LED_PINS, BL_LED | BLUE_LED);
+        SysCtlDelay(2000000); /* Delay for a bit. */
 
-    while(1);
+        if(OTA_update() == RETVAL_SUCCESS){
+            LOG("OTA update success!\r\n");
+            GPIOPinWrite(LEDS_GPIO_BASE, BOARD_LED_PINS, BL_LED | GREEN_LED);
+            SysCtlDelay(2000000); /* Delay for a bit. */
+            SysCtlReset();
+        }
+        else{
+            LOG("OTA update failed!\r\n");
+            while(1);
+        }
+    }
+    else if(NORMAL_APP_START == enu_BLstate){
+        // Here we jump to the main app.
+        jump_to_app();
+    }
 }
