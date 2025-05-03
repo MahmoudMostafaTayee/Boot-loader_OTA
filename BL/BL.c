@@ -1,8 +1,13 @@
 /**
- * @file    BL.c
- * @brief   Implementation of the boot loader with OTA update.
- *
+ * @file BL.c
+ * @author Mahmoud Mostafa Tayee (mahmoud.tayee.1994@gmail.com)
+ * @brief Implementation of the boot loader with OTA update.
  * @details This module provides the functions for the boot loader with using UART for OTA update.
+ * @version 0.1
+ * @date 2025-05-03
+ * 
+ * @copyright Copyright (c) 2025
+ * 
  */
 
 /******************************************************************************/
@@ -26,7 +31,7 @@
 #include "inc/hw_gpio.h"
 #include "drivers/buttons.h"
 #include "BL.h"
-#include "../retval.h"
+#include "../common/common.h"
 
 #ifdef DEBUG
 /**
@@ -136,21 +141,21 @@ void ConfigureDbgUART(void)
  *
  * @param u32_peripherals The peripheral to be enabled.
  * 
- * @details This function sets the system clock to use a 16MHz crystal with a
+ * @details This function sets the system clock to use a 16 MHz crystal with a
  *          phase-locked loop (PLL) and a system divider of 4, resulting in a
- *          50MHz system clock. It also enables the specified GPIO peripheral
+ *          100 MHz system clock. It also enables the specified GPIO peripheral
  *          required for the on-board LED and button functionality.
  */
-
 void clkConfiguration(uint32_t u32_peripherals)
 {
-    // Set the clocking to run directly from the crystal.
+    // Set the system clock to 100 MHz using PLL and 16 MHz crystal
     MAP_SysCtlClockSet(SYSCTL_SYSDIV_4 | SYSCTL_USE_PLL | SYSCTL_XTAL_16MHZ |
                        SYSCTL_OSC_MAIN);
 
     // Enable the GPIO port that is used for the on-board LED + button.
     MAP_SysCtlPeripheralEnable(u32_peripherals);
 }
+
 
 /**
  * @brief Initializes the LEDs on the board.
@@ -279,7 +284,6 @@ int main(void)
     uint16_t u16_startTime = gu16_TickCount;
     LOG("Press the SW2 button to enter the OTA upgrade mode!\r\n");
 
-    // We are finished.  Hang around doing nothing.
     while(1)
     {
         uint8_t delta, state;
@@ -303,13 +307,20 @@ int main(void)
 
     if(OTA_UPDATE_REQUESTED == enu_BLstate){
         LOG("Starting OTA update!\r\n");
-        GPIOPinWrite(LEDS_GPIO_BASE, BOARD_LED_PINS, BL_LED | BLUE_LED);
-        SysCtlDelay(2000000); /* Delay for a bit. */
+        GPIOPinWrite(LEDS_GPIO_BASE, BOARD_LED_PINS, BLUE_LED);
+        DELAY_S(1); /* Delay for a bit. */
+
+        GPIOPinWrite(LEDS_GPIO_BASE, BOARD_LED_PINS, GREEN_LED);
+        DELAY_S(1); /* Delay for a bit. */
+
+        GPIOPinWrite(LEDS_GPIO_BASE, BOARD_LED_PINS, BLUE_LED);
+        DELAY_S(1); /* Delay for a bit. */
+
 
         if(OTA_update() == RETVAL_SUCCESS){
             LOG("OTA update success!\r\n");
-            GPIOPinWrite(LEDS_GPIO_BASE, BOARD_LED_PINS, BL_LED | GREEN_LED);
-            SysCtlDelay(2000000); /* Delay for a bit. */
+            GPIOPinWrite(LEDS_GPIO_BASE, BOARD_LED_PINS, GREEN_LED);
+            DELAY_S(3); /* Delay for a bit. */
             SysCtlReset();
         }
         else{

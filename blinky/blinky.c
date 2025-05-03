@@ -9,18 +9,6 @@
  * @copyright Copyright (c) 2025
  * 
  */
-//*****************************************************************************
-//
-//! \file       blinky.c
-//! \brief      Blink an LED at a user-defined rate
-//
-//! 
-//! EK-TM4C123GXL.
-//
-//! This program is a modified version of the original Texas Instruments
-//! blinky example. All the original code is included and the new code is
-//! marked with "Added by mahmoud" comment.
-//
 
 /******************************************************************************/
 /* Includes                                                                   */
