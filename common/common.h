@@ -15,8 +15,8 @@
 #include "retval.h"
 
 /* Delay functions */
-#define DELAY_S(s)     SysCtlDelay((uint32_t)((s) * (100000000 / 3)))
-#define DELAY_MS(ms)   SysCtlDelay((uint32_t)((ms) * (100000000 / 3 / 1000)))
-#define DELAY_US(us)   SysCtlDelay((uint32_t)((us) * (100000000 / 3 / 1000000)))
+#define DELAY_S(s)     SysCtlDelay((uint32_t)((s) * (SysCtlClockGet() / 3)))
+#define DELAY_MS(ms)   SysCtlDelay((uint32_t)((ms) * (SysCtlClockGet() / 3000)))
+#define DELAY_US(us)   SysCtlDelay((uint32_t)((us) * (SysCtlClockGet() / 3000000)))
 
 #endif /* __COMMON_H__ */

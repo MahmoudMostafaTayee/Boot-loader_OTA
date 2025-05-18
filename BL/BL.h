@@ -17,14 +17,21 @@ extern "C"
 /******************************************************************************/
 /* Includes                                                                   */
 /******************************************************************************/
-
+#include "../common/common.h"
+#include "OTA/ota.h"
+#include "drivers/buttons.h"
 /******************************************************************************/
 /* Macros                                                                     */
 /******************************************************************************/
 #define LOG(...)                UARTprintf(__VA_ARGS__)
 
-#define MAIN_APP_RESET_HNDL_ADD (0x00004004)
+#define APP1_START_ADDR         (0x00004000) /*Starts after the BL(12K), 0x00004000.*/
+#define APP1_END_ADDR           (0x00022000) /*BL(12K) + App1(120K), 0x00022000.*/
+#define APP2_START_ADDR         APP1_END_ADDR /*Starts after the App1(120K), 0x00022000.*/
 #define BL_WAIT_TRIGGER_MS      3000
+
+#define RAM_BASE                (0x20000000)
+#define RAM_SIZE                (0x00008000)
 
 #define BL_UART_BAUD_RATE       115200
 

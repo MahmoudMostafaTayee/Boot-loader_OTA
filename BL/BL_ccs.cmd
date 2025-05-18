@@ -1,42 +1,6 @@
-/******************************************************************************
- *
- * BL_ccs.cmd - CCS linker configuration file for BL.
- *
- * Copyright (c) 2012-2020 Texas Instruments Incorporated.  All rights reserved.
- * Software License Agreement
- * 
- * Texas Instruments (TI) is supplying this software for use solely and
- * exclusively on TI's microcontroller products. The software is owned by
- * TI and/or its suppliers, and is protected under applicable copyright
- * laws. You may not combine this software with "viral" open-source
- * software in order to form a larger program.
- * 
- * THIS SOFTWARE IS PROVIDED "AS IS" AND WITH ALL FAULTS.
- * NO WARRANTIES, WHETHER EXPRESS, IMPLIED OR STATUTORY, INCLUDING, BUT
- * NOT LIMITED TO, IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE APPLY TO THIS SOFTWARE. TI SHALL NOT, UNDER ANY
- * CIRCUMSTANCES, BE LIABLE FOR SPECIAL, INCIDENTAL, OR CONSEQUENTIAL
- * DAMAGES, FOR ANY REASON WHATSOEVER.
- * 
- * This is part of revision 2.2.0.295 of the EK-TM4C123GXL Firmware Package.
- *
- *****************************************************************************/
+--retain=g_pfnVectors /* Retain interrupt vector table */
 
---retain=g_pfnVectors
-
-/* The following command line options are set as part of the CCS project.    */
-/* If you are building using the command line, or for some reason want to    */
-/* define them here, you can uncomment and modify these lines as needed.     */
-/* If you are using CCS for building, it is probably better to make any such */
-/* modifications in your CCS project and leave this file alone.              */
-/*                                                                           */
-/* --heap_size=0                                                             */
-/* --stack_size=256                                                          */
-/* --library=rtsv7M3_T_le_eabi.lib                                           */
-
-/* The starting address of the application.  Normally the interrupt vectors  */
-/* must be located at the beginning of the application.                      */
-#define APP_BASE 0x00000000
+#define APP_BASE 0x00000000 /* Bootloader starts at 0x00000000 */
 #define RAM_BASE 0x20000000
 
 /* System memory map */
@@ -44,32 +8,50 @@
 MEMORY
 {
     /* Application stored in and executes from internal flash */
-    FLASH (RX) : origin = APP_BASE, length = 0x00004000 /* This has been modified to be 0x00004000 instead of whole Flash(0x00040000) as the BL length is set to 16KB.*/
+    FLASH (RX) : origin = APP_BASE, length = 0x00004000     /* This has been modified to be 0x00004000 instead of whole Flash(0x00040000) as the BL length is set to 16KB.*/
     /* Application uses internal RAM for data */
-    SRAM (RWX) : origin = 0x20000000, length = 0x00008000
+    SRAM (RWX) : origin = 0x20000000, length = 0x00008000   /* 32KB */
 }
 
 /* Section allocation in memory */
 
 SECTIONS
 {
-    .intvecs:   > APP_BASE
-    .text   :   > FLASH
-    .const  :   > FLASH
-    .cinit  :   > FLASH
-    .pinit  :   > FLASH
-    .init_array : > FLASH
+    .intvecs:   > APP_BASE       /* Interrupt vector table at start of FLASH */
 
-    .vtable :   > RAM_BASE
-    .data   :   > SRAM
-    .bss    :   > SRAM
-    .sysmem :   > SRAM
-    .stack  :   > SRAM
-#ifdef  __TI_COMPILER_VERSION__
-#if     __TI_COMPILER_VERSION__ >= 15009000
-    .TI.ramfunc : {} load=FLASH, run=SRAM, table(BINIT)
-#endif
-#endif
+    .text       : > FLASH        /* Code */
+    .const      : > FLASH        /* Constants */
+    .cinit      : > FLASH        /* Initialization data */
+    .pinit      : > FLASH        /* Constructor lists */
+    .init_array : > FLASH        /* C++ initializers */
+
+    .vtable     : > RAM_BASE     /* Optional RAM vector table */
+
+    /* .data section (initialized variables) */
+    .data: 
+    { 
+        __BL_DATA_START = .;    /* Start of .data in SRAM */
+        *(.data)                /* All .data sections */
+        __BL_DATA_END = .;      /* End of .data */
+    } > SRAM
+
+    /* .bss section (uninitialized variables) */
+    .bss: 
+    { 
+        __BL_BSS_START = .;     /* Start of .bss */
+        *(.bss)                 /* All .bss sections */
+        *(COMMON)               /* COMMON section (e.g., globals) */
+        __BL_BSS_END = .;       /* End of .bss */
+    } > SRAM
+
+    .sysmem     : > SRAM         /* Dynamic memory (heap) */
+    .stack      : > SRAM (HIGH)  /* Stack at end of SRAM */
 }
+/* Explicitly retain symbols to prevent optimization */
+--retain="__BL_DATA_START"
+--retain="__BL_DATA_END"
+--retain="__BL_BSS_START"
+--retain="__BL_BSS_END"
 
+/* Stack configuration */
 __STACK_TOP = __stack + 512;

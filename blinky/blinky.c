@@ -60,10 +60,8 @@ void ConfigureDbgUART(void);
  */
 void ConfigureDbgUART(void)
 {
-    // Enable the GPIO Peripheral used by the UART.
+    // Enable UART2 and GPIO peripherals
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
-
-    // Enable UART2
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART2);
 
     // Wait for the peripherals to be ready

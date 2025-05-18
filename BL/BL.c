@@ -29,9 +29,10 @@
 #include "driverlib/uart.h"
 #include "utils/uartstdio.h"
 #include "inc/hw_gpio.h"
-#include "drivers/buttons.h"
 #include "BL.h"
-#include "../common/common.h"
+#include "driverlib/interrupt.h"
+#include "inc/tm4c123gh6pm.h" 
+#include "driverlib/flash.h"
 
 #ifdef DEBUG
 /**
@@ -52,13 +53,28 @@ __error__(char *pcFilename, uint32_t ui32Line)
 #endif
 
 /* ***********************************************************************************/
+/* MACROS                                                                            */
+/* ***********************************************************************************/
+#define __DSB()                     __asm("    DSB")
+#define __ISB()                     __asm("    ISB")
+#define FLASH_PROTECT_SECTOR_0_7    (0xFF) /*The TM4C123GH6PM has 256KB of Flash divided into 128 sectors of 2KB each. To protect the bootloader’s region (first 16KB: 0x00000000–0x00003FFF), it's needed to protect sectors 0–7 (each sector is 2KB).*/
+
+/* ***********************************************************************************/
+/* External variables                                                                */
+/* ***********************************************************************************/
+extern uint32_t __BL_DATA_START;
+extern uint32_t __BL_DATA_END;
+extern uint32_t __BL_BSS_START;
+extern uint32_t __BL_BSS_END;
+
+/* ***********************************************************************************/
 /* Global variables                                                                  */
 /* ***********************************************************************************/
 volatile uint16_t gu16_TickCount = 0;
 static const uint32_t gau32_bl_version[2] = {MAJOR, MINOR}; 
 
 /* ***********************************************************************************/
-/* Functions prototypes */
+/* Functions prototypes                                                              */
 /* ***********************************************************************************/
 void ConfigureOTAcommUART(void);
 void ConfigureDbgUART(void);
@@ -66,9 +82,9 @@ void clkConfiguration(uint32_t u32_peripherals);
 void LedsInit(void);
 void SysTickIntHandler(void);
 void InitSysTick(void);
-void app_init(void);
-static void jump_to_app(void);
-retval_t OTA_update(void);
+void init_bootloader(void);
+static void jump_to_app(uint32_t);
+void deinit_bootloader(void);
 
 /* ***********************************************************************************/
 /* Functions definitions */
@@ -141,15 +157,14 @@ void ConfigureDbgUART(void)
  *
  * @param u32_peripherals The peripheral to be enabled.
  * 
- * @details This function sets the system clock to use a 16 MHz crystal with a
- *          phase-locked loop (PLL) and a system divider of 4, resulting in a
- *          100 MHz system clock. It also enables the specified GPIO peripheral
+ * @details This function sets the system clock to use the PLL. The Processor clock is a phase-locked loop pll / 2.5. 
+ *          It also enables the specified GPIO peripheral
  *          required for the on-board LED and button functionality.
  */
 void clkConfiguration(uint32_t u32_peripherals)
 {
-    // Set the system clock to 100 MHz using PLL and 16 MHz crystal
-    MAP_SysCtlClockSet(SYSCTL_SYSDIV_4 | SYSCTL_USE_PLL | SYSCTL_XTAL_16MHZ |
+    // Set the system clock to 80 MHz using PLL.
+    MAP_SysCtlClockSet(SYSCTL_SYSDIV_2_5 | SYSCTL_USE_PLL | SYSCTL_XTAL_16MHZ |
                        SYSCTL_OSC_MAIN);
 
     // Enable the GPIO port that is used for the on-board LED + button.
@@ -211,7 +226,7 @@ void InitSysTick(void)
  * buttons. Finally, initializes the DBG UART and the OTA comm. UART
  * for the BL.
  */
-void app_init(void){
+void init_bootloader(void){
     uint32_t u32_peripherals = 0x00;
 
     // Enable the GPIO port that is used for the on-board LED + button.
@@ -231,6 +246,14 @@ void app_init(void){
 
     // Initialize the BL comm. UART.
     ConfigureOTAcommUART();
+
+    // Protect first 16KB (sectors 0-7) of Flash
+    FlashProtectSet(FLASH_BASE, FLASH_PROTECT_SECTOR_0_7);
+
+    // Verify protection
+    if (FlashProtectGet(FLASH_BASE) != FLASH_PROTECT_SECTOR_0_7) {
+        LOG("Flash protection failed!\n");
+    }
 }
 
 
@@ -242,23 +265,69 @@ void app_init(void){
  * BL(RED) LED, and finally calls the Main app's reset handler.
  *
  */
-static void jump_to_app(void)
+static void jump_to_app(uint32_t app_base_addr)
 {
     LOG("Jumping to app\n");
+    
+    /* 1. Get the stack pinter from the application address table. */
+    uint32_t app_stack_pointer = *((volatile uint32_t *)app_base_addr);
+    // Check if app_stack_pointer is within RAM bounds (0x20000000-0x20008000)
+    if ((app_stack_pointer < RAM_BASE) || (app_stack_pointer > (RAM_BASE + RAM_SIZE))) {
+        LOG("Invalid stack pointer!\n");
+        return;
+    }
 
-    /* Jump to Main app's reset handler. */
-    void (*app_reset_handler) () = (void(*)())(*((volatile uint32_t*)MAIN_APP_RESET_HNDL_ADD));
+
+    /* 2. Get the reset handler address from the vector table */
+    void (*app_reset_handler) () = (void(*)())(*((volatile uint32_t*)(app_base_addr + 4)));
+    // Check if reset handler is in app flash region
+    if ((uint32_t)app_reset_handler < APP1_START_ADDR || (uint32_t)app_reset_handler > APP1_END_ADDR) {
+        LOG("Invalid reset handler!\n");
+        return;
+    }
+    
+    /* 3. Disable interrupts */
+    IntMasterDisable();
+    
+    /* 4. De-initialize system (disable SysTick, disable peripherals, etc.) */
+    deinit_bootloader();
+
+     HWREG(NVIC_VTABLE_R) = app_base_addr;  // Set vector table offset
+    __DSB();
+    __ISB();
+
+    /* 5. Set MSP (Main Stack Pointer) to the app's stack pointer.*/
+    __set_MSP(app_stack_pointer);
 
     /* Turn off the BL pin. */
     GPIOPinWrite(LEDS_GPIO_BASE, BOARD_LED_PINS, 0);
 
-    /* Call the Main application. */
+    /* 6. Jump to application's Reset Handler */
     app_reset_handler();
 }
 
-retval_t OTA_update(void) { 
-    return RETVAL_SUCCESS; 
+void deinit_bootloader(void)
+{
+    SysTickDisable();
+    SysTickIntDisable();
+
+    // Disable UARTs, GPIOs, timers, etc.
+    SysCtlPeripheralDisable(SYSCTL_PERIPH_UART0);
+    SysCtlPeripheralDisable(SYSCTL_PERIPH_UART2);
+    SysCtlPeripheralDisable(SYSCTL_PERIPH_GPIOD);
+    SysCtlPeripheralDisable(SYSCTL_PERIPH_GPIOA);
+
+    // Clear bootloader .data section from SRAM
+    uint8_t *pDataStart = (uint8_t*)&__BL_DATA_START;
+    uint8_t *pDataEnd = (uint8_t*)&__BL_DATA_END;
+    while (pDataStart < pDataEnd) *pDataStart++ = 0;
+
+    // Clear bootloader .bss section from SRAM 
+    uint8_t *pBssStart = (uint8_t*)&__BL_BSS_START;
+    uint8_t *pBssEnd = (uint8_t*)&__BL_BSS_END;
+    while (pBssStart < pBssEnd) *pBssStart++ = 0;
 }
+
 /**
  * @brief Main app
  * 
@@ -266,7 +335,7 @@ retval_t OTA_update(void) {
  */
 int main(void)
 {
-    app_init();
+    init_bootloader();
 
     tenu_BLstate enu_BLstate = BL_STARTED;
 
@@ -274,7 +343,7 @@ int main(void)
     LOG("------------------------------------------------------------\n");
     LOG("------------------------------------------------------------\n");
     LOG("BL world!\n");
-    LOG("Starting BL version %d.%d\n", gau32_bl_version[0], gau32_bl_version[1]);
+    LOG("Starting BL version %u.%u\n", gau32_bl_version[0], gau32_bl_version[1]);
     LOG("------------------------------------------------------------\n");
     LOG("------------------------------------------------------------\n");
 
@@ -317,7 +386,7 @@ int main(void)
         DELAY_S(1); /* Delay for a bit. */
 
 
-        if(OTA_update() == RETVAL_SUCCESS){
+        if(start_OTA_update() == RETVAL_SUCCESS){
             LOG("OTA update success!\r\n");
             GPIOPinWrite(LEDS_GPIO_BASE, BOARD_LED_PINS, GREEN_LED);
             DELAY_S(3); /* Delay for a bit. */
@@ -330,6 +399,6 @@ int main(void)
     }
     else if(NORMAL_APP_START == enu_BLstate){
         // Here we jump to the main app.
-        jump_to_app();
+        jump_to_app(APP1_START_ADDR);
     }
 }
